@@ -2,6 +2,7 @@
  *
  * Unauthorized copying, modification, or distribution is strictly prohibited.
  */
+import bcrypt from 'bcryptjs';
 import {
   db,
   COLLECTIONS,
@@ -38,6 +39,23 @@ import {
   HelpTicketProposedSolution,
   HelpTicketRating,
 } from '../types';
+
+const BCRYPT_SALT_ROUNDS = 10;
+
+const isHashedPassword = (password: string | undefined): boolean => {
+  return typeof password === 'string' && /\$2[aby]\$\d{2}\$/.test(password);
+};
+
+const hashPassword = async (password: string): Promise<string> => {
+  return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+};
+
+const verifyPassword = async (plain: string, stored: string): Promise<boolean> => {
+  if (isHashedPassword(stored)) {
+    return bcrypt.compare(plain, stored);
+  }
+  return plain === stored;
+};
 
 const docToTask = (d: any): Task => {
   const data = d.data();
@@ -123,8 +141,18 @@ export const api = {
     const snap = await getDocs(q);
     if (snap.empty) throw new Error('Invalid email or password');
     const doc = snap.docs[0];
-    const data = doc.data();
-    if (data.password !== password) throw new Error('Invalid email or password');
+    const data = doc.data() as { password?: string } & Record<string, any>;
+    const storedPassword = data.password || '';
+    const passwordMatch = await verifyPassword(password, storedPassword);
+    if (!passwordMatch) throw new Error('Invalid email or password');
+
+    if (!isHashedPassword(storedPassword)) {
+      await updateDoc(doc(db, COLLECTIONS.USERS, doc.id), {
+        password: await hashPassword(password),
+        updated_at: isoToTimestamp(new Date().toISOString()),
+      });
+    }
+
     const u = { ...data, id: doc.id };
     delete (u as any).password;
     return u as User;
@@ -142,9 +170,10 @@ export const api = {
   },
 
   createUser: async (u: Omit<User, 'id'> & { password: string }): Promise<User> => {
+    const hashedPassword = await hashPassword(u.password);
     const ref = await addDoc(collection(db, COLLECTIONS.USERS), {
       ...u,
-      password: u.password,
+      password: hashedPassword,
       approved: true,
       created_at: isoToTimestamp(new Date().toISOString()),
     });
@@ -157,10 +186,16 @@ export const api = {
   },
 
   updateUser: async (id: string, updates: Partial<User>): Promise<void> => {
-    await updateDoc(doc(db, COLLECTIONS.USERS, id), {
+    const payload: Record<string, any> = {
       ...updates,
       updated_at: isoToTimestamp(new Date().toISOString()),
-    });
+    };
+
+    if (updates.password) {
+      payload.password = await hashPassword(updates.password);
+    }
+
+    await updateDoc(doc(db, COLLECTIONS.USERS, id), payload);
   },
 
   // --- Tasks ---
@@ -1004,8 +1039,9 @@ export const api = {
 
   /** Reset user password in Firestore. */
   resetPassword: async (userId: string, newPassword: string): Promise<void> => {
+    const hashedPassword = await hashPassword(newPassword);
     await updateDoc(doc(db, COLLECTIONS.USERS, userId), {
-      password: newPassword,
+      password: hashedPassword,
       updated_at: isoToTimestamp(new Date().toISOString()),
     });
   },
