@@ -19,7 +19,7 @@ import {
   ExternalLink,
   FileText,
 } from 'lucide-react';
-import { formatDateDDMMYYYY, getDisplayRecurring, formatRecurringLabel, getUserName } from '../lib/utils';
+import { formatDateDDMMYYYY, getDisplayRecurring, formatRecurringLabel, getUserName, getClientName } from '../lib/utils';
 
 const ROWS_PER_PAGE_OPTIONS = [25, 100, 500, 1000] as const;
 
@@ -80,9 +80,11 @@ export const RecurringTasks: React.FC = () => {
 
   // Users for name dropdowns
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [allClients, setAllClients] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     api.getUsers().then(setAllUsers).catch(console.error);
+    api.getClients().then(setAllClients).catch(console.error);
   }, []);
 
   // Debounced name filters
@@ -320,6 +322,7 @@ export const RecurringTasks: React.FC = () => {
           { header: 'Frequency', accessor: (t) => formatRecurringLabel(getDisplayRecurring(t, taskById), 'None') },
           { header: 'Assigned To', accessor: (t) => getUserName(t.assigned_to_id, allUsers) },
           { header: 'Assigned By', accessor: (t) => getUserName(t.assigned_by_id, allUsers) },
+          { header: 'Client Name', accessor: (t) => getClientName(t.client_id, allClients) },
           { header: 'Verifier', accessor: (t) => (t.verification_required ? (getUserName(t.verifier_id, allUsers) || 'Required') : '') },
           { header: 'Attachment Required', accessor: (t) => t.attachment_required ? 'Yes' : 'No' },
           { header: 'Attachment Type', accessor: (t) => t.attachment_type || '' },
@@ -628,6 +631,7 @@ export const RecurringTasks: React.FC = () => {
                 <th className="px-4 py-3 font-medium text-slate-600 w-24 text-center">Priority</th>
                 <th className="px-4 py-3 font-medium text-slate-600 w-56">Assigned To</th>
                 <th className="px-4 py-3 font-medium text-slate-600 w-56">Assigned By</th>
+                <th className="px-4 py-3 font-medium text-slate-600 w-40">Client Name</th>
                 <th className="px-4 py-3 font-medium text-slate-600 w-52">Verifier</th>
                 {/* <th className="px-4 py-3 font-medium text-slate-600 w-32 text-center">Attachment</th> */}
                 <th className="px-4 py-3 font-medium text-slate-600 w-32 text-center">Next Due</th>
@@ -636,14 +640,14 @@ export const RecurringTasks: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr>               
-<td colSpan={10} className="p-8 text-center text-slate-500">
+                <tr>
+                  <td colSpan={11} className="p-8 text-center text-slate-500">
                     Loading recurring tasks...
                   </td>
                 </tr>
               ) : pageTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-8">
+                  <td colSpan={11} className="p-8">
                     <div className="flex flex-col items-center justify-center text-slate-500">
                       <Repeat className="w-12 h-12 text-slate-300 mb-3" />
                       <p className="text-base font-medium text-slate-600">No active recurring tasks found.</p>
@@ -665,14 +669,15 @@ export const RecurringTasks: React.FC = () => {
                     <td className="px-4 py-3 text-slate-600 whitespace-normal wrap-break-word align-top leading-6">
                       {formatRecurringDaysLabel(t.recurring_days || [])}
                     </td>
-        
+
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 capitalize">
                         {t.priority}
                       </span>
-                    </td>   
+                    </td>
                     <td className="px-4 py-3 text-slate-600 whitespace-normal wrap-break-word align-top leading-6">{getUserName(t.assigned_to_id, allUsers)}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-normal wrap-break-word align-top leading-6">{getUserName(t.assigned_by_id, allUsers) || '-'}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-normal wrap-break-word align-top leading-6">{getClientName(t.client_id, allClients) || '-'}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-normal wrap-break-word align-top leading-6">
                       {t.verification_required ? (getUserName(t.verifier_id, allUsers) || 'Required') : '-'}
                     </td>

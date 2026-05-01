@@ -33,7 +33,6 @@ export type RecurringType =
 
 export type TaskStatus =
   | 'pending'
-  | 'in_progress'
   | 'completed'
   | 'overdue'
   | 'cancelled'

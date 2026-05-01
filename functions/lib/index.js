@@ -186,7 +186,7 @@ exports.sendDailyDueDateReminders = (0, scheduler_1.onSchedule)({
     // Query tasks that are still active AND have a due_date before today
     const overdueTasksSnap = await db
         .collection(COLLECTIONS.TASKS)
-        .where('status', 'in', ['pending', 'in_progress', 'overdue', 'correction_required'])
+        .where('status', 'in', ['pending', 'overdue', 'correction_required'])
         .where('due_date', '<', today)
         .get();
     // Group overdue tasks count by assigned user
@@ -263,7 +263,7 @@ exports.sendDailyReminder = (0, scheduler_1.onSchedule)({
     // Find all tasks that are active (assigned/pending)
     const activeTasksSnap = await db
         .collection(COLLECTIONS.TASKS)
-        .where('status', 'in', ['pending', 'in_progress', 'overdue'])
+        .where('status', 'in', ['pending', 'overdue'])
         .get();
     // Collect unique user IDs who have at least one active task
     const userIdsWithTasks = new Set();

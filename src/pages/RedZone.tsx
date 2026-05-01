@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { storage } from '../lib/firebase';
-import { compressImageForUpload, isHoliday, formatDateDDMMYYYY, getDisplayRecurring, formatRecurringLabel, getUserName, getUserCity } from '../lib/utils';
+import { compressImageForUpload, isHoliday, formatDateDDMMYYYY, getDisplayRecurring, formatRecurringLabel, getUserName, getUserCity, getClientName } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { SearchableUserSelect } from '../components/ui/SearchableUserSelect';
 import { Holiday, Task, User, UserRole } from '../types';
@@ -40,6 +40,7 @@ export const RedZone: React.FC = () => {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [allClients, setAllClients] = useState<{ id: string; name: string }[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,19 +122,25 @@ export const RedZone: React.FC = () => {
   useEffect(() => {
     api.getUsers().then(setAllUsers).catch(console.error);
     api.getHolidays().then(setHolidays).catch(console.error);
+    api.getClients().then(setAllClients).catch(console.error);
   }, []);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
-    const assignedToId =
-      user?.role === UserRole.TEAMMATE ? user?.id : undefined;
-    const overdue = await api.getOverdueTasks({
-      assignedToId,
-      limitCount: 500,
-    });
-    await hydrateRecurringLookup(overdue);
-    setTasks(overdue);
-    setLoading(false);
+    try {
+      const assignedToId =
+        user?.role === UserRole.TEAMMATE ? user?.id : undefined;
+      const overdue = await api.getOverdueTasks({
+        assignedToId,
+        limitCount: 500,
+      });
+      await hydrateRecurringLookup(overdue);
+      setTasks(overdue);
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [hydrateRecurringLookup, user?.id, user?.role]);
 
   useEffect(() => {
@@ -207,7 +214,7 @@ export const RedZone: React.FC = () => {
   }, [customEnd, customStart, dateFilter]);
 
   const filtered = useMemo(() => {
-    const visibleTasks = isAdmin ? tasks : tasks.filter((t) => t.assigned_to_id === user?.id);
+    const visibleTasks = isTeammate ? tasks.filter((t) => t.assigned_to_id === user?.id) : tasks;
     const range = resolveDateRange();
     const dateFilteredTasks = visibleTasks.filter((task) => {
       if (range.dueDateFrom && task.due_date < range.dueDateFrom) return false;
@@ -231,9 +238,8 @@ export const RedZone: React.FC = () => {
       if (cityFilter && getUserCity(task.assigned_to_id, allUsers).toLowerCase() !== cityFilter.toLowerCase()) return false;
       return true;
     });
-  }, [cityFilter, debouncedAssignedBy, debouncedAssignedTo, isTeammate, isAdmin, recurringFilter, resolveDateRange, taskById, tasks, user?.id]);
+  }, [allUsers, cityFilter, debouncedAssignedBy, debouncedAssignedTo, isTeammate, recurringFilter, resolveDateRange, taskById, tasks, user?.id]);
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [cityFilter, debouncedAssignedTo, debouncedAssignedBy, recurringFilter, dateFilter, customStart, customEnd, tasks]);
@@ -686,6 +692,11 @@ export const RedZone: React.FC = () => {
                         <span>
                           <span className="font-medium text-slate-700">Status:</span> {t.status}
                         </span>
+                        {getClientName(t.client_id, allClients) ? (
+                          <span>
+                            <span className="font-medium text-slate-700">Client:</span> {getClientName(t.client_id, allClients)}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </Link>
@@ -919,18 +930,18 @@ export const RedZone: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
-                      <select
-                        value={editPriority}
-                        onChange={(e) => setEditPriority(e.target.value as Task['priority'])}
-                        className="w-full h-10 rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-teal-500"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="urgent">Urgent</option>
-                      </select>
-                    </div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+                  <select
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value as Task['priority'])}
+                    className="w-full h-10 rounded-lg border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Recurring</label>
                   <select

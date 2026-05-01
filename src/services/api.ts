@@ -158,6 +158,23 @@ export const api = {
     return u as User;
   },
 
+  loginWithGoogle: async (email: string): Promise<User> => {
+    const usersRef = collection(db, COLLECTIONS.USERS);
+    const q = query(usersRef, where('email', '==', email.toLowerCase().trim()));
+    const snap = await getDocs(q);
+    if (snap.empty) throw new Error('Account not found. Please contact an administrator.');
+    const docSnap = snap.docs[0];
+    const data = docSnap.data();
+    
+    if (data.approved === false) {
+      throw new Error('Your account is pending approval by an administrator.');
+    }
+
+    const u = { ...data, id: docSnap.id };
+    delete (u as any).password;
+    return u as User;
+  },
+
   // --- Users ---
   getUsers: async (): Promise<User[]> => {
     const snap = await getDocs(collection(db, COLLECTIONS.USERS));
@@ -264,8 +281,13 @@ export const api = {
         limit(limitCount)
       );
     }
-    const snap = await getDocs(q);
-    return filterRecurringMasters(snap.docs.map((d) => docToTask(d)), includeRecurringMasters);
+    try {
+      const snap = await getDocs(q);
+      return filterRecurringMasters(snap.docs.map((d) => docToTask(d)), includeRecurringMasters);
+    } catch (error) {
+      console.error('🔥 FIRESTORE ERROR IN getOverdueTasks: This is almost certainly a missing Firebase Composite Index. Please click the link in the error below to create it in your Firebase Console:', error);
+      throw error;
+    }
   },
 
   /** Completed tasks with required attachment for Bogus Attachment page. */

@@ -19,7 +19,7 @@ import {
     ClipboardCheck,
     Pencil,
 } from 'lucide-react';
-import { formatDateDDMMYYYY } from '../lib/utils';
+import { formatDateDDMMYYYY, getClientName } from '../lib/utils';
 
 const ROWS_PER_PAGE_OPTIONS = [25, 100, 500, 1000] as const;
 
@@ -40,8 +40,13 @@ export const ApproveTask: React.FC = () => {
     const [rejectComment, setRejectComment] = useState('');
     const [editTask, setEditTask] = useState<Task | null>(null);
     const [editDueDate, setEditDueDate] = useState('');
+    const [allClients, setAllClients] = useState<{ id: string; name: string }[]>([]);
 
     const isTeammate = user?.role === UserRole.TEAMMATE;
+
+    useEffect(() => {
+        api.getClients().then(setAllClients).catch(console.error);
+    }, []);
 
     const getActiveFilters = useCallback(() => {
         return {
@@ -285,6 +290,7 @@ export const ApproveTask: React.FC = () => {
                             <th className="whitespace-nowrap">Doer</th>
                             {!isTeammate && <th className="whitespace-nowrap">Verifier</th>}
                             <th className="whitespace-nowrap text-center">Due Date</th>
+                            <th className="whitespace-nowrap">Client Name</th>
                             {/* <th className="whitespace-nowrap text-center">Priority</th> */}
                             {/* <th className="whitespace-nowrap text-center">Attachment</th> */}
                             <th className="whitespace-nowrap text-right pr-4">Action</th>
@@ -293,7 +299,7 @@ export const ApproveTask: React.FC = () => {
                     <tbody>
                         {tasks.length === 0 ? (
                             <tr>
-                                <td colSpan={isTeammate ? 8 : 9} className="py-16">
+                                <td colSpan={isTeammate ? 9 : 10} className="py-16">
                                     <div className="flex flex-col items-center justify-center text-slate-500">
                                         <ClipboardCheck className="w-12 h-12 text-slate-300 mb-3" />
                                         <p className="text-base font-medium text-slate-600">No approval tasks found.</p>
@@ -327,6 +333,11 @@ export const ApproveTask: React.FC = () => {
                                             </td>
                                         )}
                                         <td className="text-center whitespace-nowrap text-slate-600 font-medium">{formatDateDDMMYYYY(task.due_date)}</td>
+                                        <td>
+                                            <span className="text-sm text-slate-700 whitespace-nowrap">
+                                                {getClientName(task.client_id, allClients) || '-'}
+                                            </span>
+                                        </td>
                                         {/*
                                         <td className="text-center">
                                             <span

@@ -16,6 +16,11 @@ export function getUserCity(userId: string | undefined | null, users: { id: stri
   return users.find((u) => u.id === userId)?.city || '';
 }
 
+export function getClientName(clientId: string | undefined | null, clients: { id: string; name: string }[]): string {
+  if (!clientId) return '';
+  return clients.find((c) => c.id === clientId)?.name || '';
+}
+
 export const RECURRING_OPTIONS = [
   { value: 'none', label: 'None' },
   { value: 'daily', label: 'Daily' },

@@ -13,6 +13,7 @@
     "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",
     "firebase": "^10.14.1",
+    "firebase-tools": "^15.16.0",
     "lucide-react": "^0.460.0",
     "papaparse": "^5.5.3",
     "react": "^18.2.0",

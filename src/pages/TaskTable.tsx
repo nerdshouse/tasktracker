@@ -13,7 +13,7 @@ import { Button } from '../components/ui/Button';
 import { CsvExportButton } from '../components/ui/CsvExportButton';
 import { SearchableUserSelect } from '../components/ui/SearchableUserSelect';
 import { exportRowsToCsv, type CsvColumn } from '../lib/csv';
-import { isHoliday, compressImageForUpload, getPendingDays, formatDateDDMMYYYY, getDisplayRecurring, formatRecurringLabel, getUserName, getUserCity } from '../lib/utils';
+import { isHoliday, compressImageForUpload, getPendingDays, formatDateDDMMYYYY, getDisplayRecurring, formatRecurringLabel, getUserName, getUserCity, getClientName } from '../lib/utils';
 import {
   ExternalLink,
   Pencil,
@@ -219,7 +219,6 @@ export const TaskTable: React.FC = () => {
     } = {};
     const openStatuses: Task['status'][] = [
       'pending',
-      'in_progress',
       'overdue',
       'cancelled',
       'pending_verification',
@@ -256,7 +255,6 @@ export const TaskTable: React.FC = () => {
 
     const openStatuses: Task['status'][] = [
       'pending',
-      'in_progress',
       'overdue',
       'cancelled',
       'pending_verification',
@@ -344,19 +342,6 @@ export const TaskTable: React.FC = () => {
     [debouncedAssignedBy, debouncedAssignedTo]
   );
 
-  const filterByStartDate = useCallback(
-    (list: Task[]) => {
-      const today = getTodayLocal();
-      return list.filter((task) => {
-        const rawStartDate = (task.start_date || '').trim();
-        if (!rawStartDate) return true;
-
-        const normalizedStartDate = rawStartDate.slice(0, 10);
-        return normalizedStartDate <= today;
-      });
-    },
-    [getTodayLocal]
-  );
 
   const hasNameFilter = debouncedAssignedTo.trim().length > 0 || debouncedAssignedBy.trim().length > 0;
 
@@ -376,7 +361,7 @@ export const TaskTable: React.FC = () => {
           sortDirection: sortConfig?.direction,
           ...filters,
         });
-        const startedRows = filterByStartDate(nextTasks);
+        const startedRows = nextTasks;
         await hydrateRecurringLookup(startedRows);
         setTasks(startedRows);
         setLastDoc(nextLastDoc);
@@ -392,7 +377,7 @@ export const TaskTable: React.FC = () => {
         setLoading(false);
       }
     },
-    [filterByStartDate, getActiveFilters, hydrateRecurringLookup, rowsPerPage, sortConfig]
+    [getActiveFilters, hydrateRecurringLookup, rowsPerPage, sortConfig]
   );
 
   const setClientPageFromRows = useCallback(
@@ -428,7 +413,7 @@ export const TaskTable: React.FC = () => {
           const doerRows = await getDoerVisibleRows();
           if (!isActive) return;
 
-          const startedRows = filterByStartDate(doerRows);
+          const startedRows = doerRows;
           const lookup = await hydrateRecurringLookup(startedRows);
           const recurringRows = recurringFilter
             ? startedRows.filter((task) => getDisplayRecurring(task, lookup) === recurringFilter)
@@ -459,7 +444,7 @@ export const TaskTable: React.FC = () => {
           });
           if (!isActive) return;
 
-          const startedRows = filterByStartDate(allRows);
+          const startedRows = allRows;
           const lookup = await hydrateRecurringLookup(startedRows);
           const recurringRows = recurringFilter
             ? startedRows.filter((task) => getDisplayRecurring(task, lookup) === recurringFilter)
@@ -509,7 +494,7 @@ export const TaskTable: React.FC = () => {
     recurringFilter,
     hasNameFilter,
     applyNameFilters,
-    filterByStartDate,
+
     getActiveFilters,
     getDoerVisibleRows,
     isSelfTasksView,
@@ -542,10 +527,10 @@ export const TaskTable: React.FC = () => {
             pageSize: 5000,
             ...filters,
           });
-          summaryTasks = filterByStartDate(summaryResult.tasks);
+          summaryTasks = summaryResult.tasks;
         }
 
-        const summaryRows = applyNameFilters(filterByStartDate(summaryTasks));
+        const summaryRows = applyNameFilters(summaryTasks);
 
         const today = getTodayLocal();
         const dueToday = summaryRows.filter(
@@ -577,9 +562,9 @@ export const TaskTable: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [applyNameFilters, filterByStartDate, getActiveFilters, getDoerVisibleRows, getTodayLocal, isSelfTasksView]);
+  }, [applyNameFilters, getActiveFilters, getDoerVisibleRows, getTodayLocal, isSelfTasksView]);
 
-  const filteredTasks = applyNameFilters(filterByStartDate(tasks));
+  const filteredTasks = applyNameFilters(tasks);
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     if (!sortConfig) return 0;
@@ -597,7 +582,7 @@ export const TaskTable: React.FC = () => {
   });
 
   const isClientMode = hasNameFilter || isSelfTasksView;
-  const tableColumnCount = 12;
+  const tableColumnCount = 13;
 
   const effectiveTotalResults = isClientMode
     ? (nameFilteredRows?.length ?? 0)
@@ -643,6 +628,7 @@ export const TaskTable: React.FC = () => {
         { header: 'Assigned To', accessor: (t) => getUserName(t.assigned_to_id, allUsers) },
         { header: 'Assigned To City', accessor: (t) => getUserCity(t.assigned_to_id, allUsers) },
         { header: 'Assigned By', accessor: (t) => getUserName(t.assigned_by_id, allUsers) },
+        { header: 'Client Name', accessor: (t) => getClientName(t.client_id, allClients) },
         { header: 'Start Date', accessor: (t) => formatDateValue(t.start_date, { emptyValue: '###' }) },
         { header: 'Due Date', accessor: (t) => formatDateValue(t.due_date, { emptyValue: '###' }) },
         { header: 'Priority', accessor: (t) => t.priority || '' },
@@ -682,23 +668,14 @@ export const TaskTable: React.FC = () => {
     }
   };
 
-  // Get unique lists of users and recurring types from the currently loaded tasks
-  // (Note: For a fully complete list across all pages, we would need to query the users collection,
-  // but for a simple client-side filter on paginated data, we extract from loaded tasks, or we can fetch users.
-  // We will assume basic extraction from loaded tasks for now to avoid additional reads if not necessary,
-  // OR we can fetch users. Let's fetch all users to populate the dropdowns properly.)
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [allClients, setAllClients] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     api.getUsers().then(setAllUsers).catch(console.error);
+    api.getClients().then(setAllClients).catch(console.error);
   }, []);
 
-  // Initialize Assigned To filter with logged-in doer's name when in self view
-  useEffect(() => {
-    if (isSelfTasksView && isTeammate && user?.name && !assignedToFilter) {
-      setAssignedToFilter(user.name);
-    }
-  }, [isSelfTasksView, isTeammate, user?.name]);
 
   const nameOptions = Array.from(
     new Set(allUsers.map((u) => (u.name || '').trim()).filter((name) => name.length > 0))
@@ -1282,9 +1259,7 @@ export const TaskTable: React.FC = () => {
             >
               <option value="">Status</option>
               <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
-              <option value="overdue">Overdue</option>
               <option value="cancelled">Cancelled</option>
               <option value="closed_permanently">Closed Permanently</option>
               <option value="pending_verification">Pending Verification</option>
@@ -1419,9 +1394,7 @@ export const TaskTable: React.FC = () => {
             >
               <option value="">Status</option>
               <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
-              <option value="overdue">Overdue</option>
               <option value="cancelled">Cancelled</option>
               <option value="closed_permanently">Closed Permanently</option>
               <option value="pending_verification">Pending Verification</option>
@@ -1493,6 +1466,7 @@ export const TaskTable: React.FC = () => {
               <th className="sticky-col-2 text-center">Description</th>
               <th className="whitespace-nowrap text-center">Assigned To</th>
               <th className="whitespace-nowrap text-center">Assigned By</th>
+              <th className="whitespace-nowrap text-center">Client Name</th>
               <th className="whitespace-nowrap text-center">
                 <button
                   type="button"
@@ -1579,6 +1553,11 @@ export const TaskTable: React.FC = () => {
                     <td>
                       <span className="text-sm font-medium text-slate-700 whitespace-pre-wrap">
                         {getUserName(t.assigned_by_id, allUsers)}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      <span className="text-sm text-slate-700 whitespace-nowrap">
+                        {getClientName(t.client_id, allClients) || '-'}
                       </span>
                     </td>
                     <td className="text-center whitespace-nowrap text-slate-600">
